@@ -73,7 +73,7 @@ streamlit run src\web\streamlit_app_modular.py
 
 ## 🔗 Live Demo
 
-**[Try the Live Application](https://bundestag-rag-api-basic.politeocean-4adf01f2.westeurope.azurecontainerapps.io/)**
+**[Try the Live Application](https://bundestag-rag-app.victoriouswater-1ba7ee2d.westeurope.azurecontainerapps.io/)**
 
 ## 🛠️ Features
 
