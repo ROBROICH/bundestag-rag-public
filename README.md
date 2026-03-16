@@ -268,7 +268,7 @@ These same tools are exposed via **MCP protocol** at `/mcp` for integration with
 
 - [Bundestag DIP API Documentation](https://dip.bundestag.de/über-dip/hilfe/api)
 - [DIP API Terms of Service](https://dip.bundestag.de/über-dip/nutzungsbedingungen)
-- [Live Demo](https://bundestag-rag-api-basic.politeocean-4adf01f2.westeurope.azurecontainerapps.io/)
+- [Live Demo](https://bundestag-mcp-chat.victoriouswater-1ba7ee2d.westeurope.azurecontainerapps.io/)
 
 ---
 
