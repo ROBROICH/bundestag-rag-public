@@ -29,6 +29,7 @@ def main():
         print("  python main.py web           # Start Streamlit web interface")
         print("  python main.py test          # Test API connection")
         print("  python main.py search        # Search documents")
+        print("  python main.py mcp           # Start MCP server + Chat UI")
         print("  python main.py examples      # Run basic examples")
         sys.exit(1)
     
@@ -56,6 +57,18 @@ def main():
         # Run search with remaining arguments
         args = [sys.executable, "-m", "src.cli.query_tool", "search"] + sys.argv[2:]
         subprocess.run(args)
+    
+    elif command == "mcp":
+        # Run MCP server + Chat Web UI (FastAPI)
+        port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
+        host = os.environ.get("MCP_HOST", "127.0.0.1")
+        subprocess.run([
+            sys.executable, "-m", "uvicorn",
+            "src.chat.app:app",
+            "--host", host,
+            "--port", str(port),
+            "--reload"
+        ])
     
     elif command == "examples":
         # Run basic examples

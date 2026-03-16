@@ -179,6 +179,18 @@ class BundestagStreamlitApp:
                 layout="wide",
                 initial_sidebar_state="expanded"
             )
+            
+            # Add meta tags for proper link sharing
+            st.markdown("""
+            <meta property="og:title" content="Bundestag.AI Lens">
+            <meta property="og:description" content="AI-powered analysis platform for German Bundestag documents">
+            <meta property="og:type" content="website">
+            <meta name="twitter:card" content="summary">
+            <meta name="twitter:title" content="Bundestag.AI Lens">
+            <meta name="twitter:description" content="AI-powered analysis platform for German Bundestag documents">
+            <meta name="application-name" content="Bundestag.AI Lens">
+            """, unsafe_allow_html=True)
+            
             st.session_state.page_configured = True
     
     def configure_page_full(self):
@@ -1068,8 +1080,6 @@ class BundestagStreamlitApp:
         # Always render the modals first (this is crucial!)
         self.summary_display.render_summary_modal()
         
-        # Render documentation modals from search manager
-        self.search_manager.render_documentation_modals()
         
         self.display_header()
         

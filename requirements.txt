@@ -1,12 +1,12 @@
-requests>=2.31.0
-pydantic>=2.0.0
+requests==2.32.5
+pydantic==2.11.7
 click>=8.1.0
 rich>=13.0.0
-python-dotenv>=1.0.0
-httpx>=0.24.0
+python-dotenv==1.2.1
+httpx[http2]==0.28.1
 tenacity>=8.2.0
 typer>=0.9.0
-pyyaml>=6.0
+pyyaml==6.0.2
 pandas>=2.0.0
 numpy>=1.24.0
 # Web UI dependencies
@@ -14,12 +14,17 @@ streamlit>=1.28.0
 plotly>=5.15.0
 streamlit-slickgrid>=0.2.0
 # RAG and AI dependencies
-openai>=1.54.0  # Updated for GPT-5 API support
+openai==1.104.2
 tiktoken>=0.5.0
 # Vector storage options
 chromadb>=0.4.0
 # Optional: for local embeddings
 sentence-transformers>=2.2.0
+# MCP Server + Chat API dependencies
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+fastmcp==3.1.0
+sse-starlette==3.0.3
 # Development dependencies
 pytest>=7.0.0
 pytest-asyncio>=0.21.0

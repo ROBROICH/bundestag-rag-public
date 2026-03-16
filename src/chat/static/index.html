@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+    <title>🏛️ Chat with your Bundestag</title>
+    <style>
+        :root {
+            --primary: #003366;
+            --primary-light: #004d99;
+            --accent: #cc0000;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --text: #1a1a2e;
+            --text-light: #6b7280;
+            --border: #e5e7eb;
+            --user-bg: #003366;
+            --user-text: #ffffff;
+            --bot-bg: #f0f4f8;
+            --bot-text: #1a1a2e;
+            --shadow: 0 2px 8px rgba(0,0,0,0.08);
+            --reason-bg: #f8fafc;
+            --reason-border: #e2e8f0;
+            --reason-active: #dbeafe;
+            --reason-done: #dcfce7;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg); color: var(--text);
+            height: 100vh; display: flex; flex-direction: column;
+        }
+        header {
+            background: var(--primary); color: white;
+            padding: 12px 24px; display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15); z-index: 10;
+        }
+        header h1 { font-size: 1.25rem; font-weight: 600; }
+        header .subtitle { font-size: 0.8rem; opacity: 0.8; margin-left: auto; }
+        .badge {
+            background: var(--accent); color: white; font-size: 0.65rem;
+            padding: 2px 8px; border-radius: 10px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        #chat-container {
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth;
+        }
+        .welcome { text-align: center; padding: 40px 20px; color: var(--text-light); }
+        .welcome h2 { font-size: 1.5rem; color: var(--primary); margin-bottom: 8px; }
+        .welcome p { margin-bottom: 16px; font-size: 0.95rem; }
+        .suggestions {
+            display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+            max-width: 600px; margin: 0 auto;
+        }
+        .suggestion {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 20px; padding: 8px 16px; font-size: 0.85rem;
+            cursor: pointer; transition: all 0.2s; color: var(--primary);
+        }
+        .suggestion:hover { background: var(--primary); color: white; border-color: var(--primary); }
+        .message {
+            display: flex; gap: 10px; max-width: 900px; width: 100%; margin: 0 auto;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { flex-direction: row-reverse; }
+        /* Messages containing tables get wider layout */
+        .message:has(table) { max-width: 1300px; }
+        .avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; flex-shrink: 0;
+        }
+        .message.bot .avatar { background: var(--primary); color: white; }
+        .message.user .avatar { background: var(--accent); color: white; }
+        .bubble {
+            padding: 12px 16px; border-radius: 16px; max-width: min(85%, 960px);
+            line-height: 1.55; font-size: 0.92rem; word-wrap: break-word;
+            overflow: visible; flex: 1 1 auto; min-width: 0;
+        }
+        .message.user .bubble { background: var(--user-bg); color: var(--user-text); border-bottom-right-radius: 4px; max-width: min(75%, 720px); overflow: hidden; }
+        .message.bot .bubble { background: var(--bot-bg); color: var(--bot-text); border-bottom-left-radius: 4px; box-shadow: var(--shadow); }
+        .message.bot .bubble:has(table) { max-width: none; }
+        .bubble strong { color: var(--primary); }
+        .bubble code { background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+        .bubble pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+        .bubble pre code { background: none; padding: 0; color: inherit; }
+        /* 6-column table — fills full bubble width, auto column sizing */
+        .bubble table { border-collapse: collapse; font-size: 0.88em; table-layout: auto; width: 100%; }
+        .table-scroll { width: 100%; max-width: none; display: block; margin: 8px 0; }
+        .bubble th, .bubble td { border: 1px solid var(--border); padding: 3px 6px; text-align: left; vertical-align: top; white-space: normal; }
+        .bubble th { background: rgba(0,51,102,0.08); font-weight: 600; color: var(--primary); white-space: nowrap; font-size: 0.88em; }
+        .bubble td:nth-child(1) { width: 36px; text-align: right; white-space: nowrap; }
+        .bubble td:nth-child(3) { width: 120px; }
+        .bubble td:nth-child(5) { width: 90px; white-space: nowrap; }
+        .bubble td:nth-child(6) { width: 110px; white-space: nowrap; text-align: center; }
+        .bubble tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
+        .bubble tr:hover td { background: rgba(0,51,102,0.04); }
+        .bubble a { color: var(--primary); text-decoration: none; border-bottom: 1px dotted var(--primary); }
+        .bubble a:hover { border-bottom-style: solid; }
+        .bubble ul, .bubble ol { margin: 6px 0 6px 20px; }
+        .bubble li { margin: 3px 0; }
+        .bubble h2 { font-size: 1.05rem; color: var(--primary); margin: 12px 0 6px 0; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+        .bubble h3 { font-size: 0.95rem; color: var(--primary); margin: 10px 0 4px 0; }
+        .bubble h4 { font-size: 0.88rem; color: var(--primary); margin: 8px 0 3px 0; }
+        .bubble hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+        .bubble p { margin: 4px 0; }
+
+        /* --- Reasoning panel (collapsible) --- */
+        .reasoning-panel {
+            background: var(--reason-bg); border: 1px solid var(--reason-border);
+            border-radius: 10px; margin-bottom: 10px; overflow: hidden;
+            font-size: 0.82rem; transition: all 0.3s ease;
+        }
+        .reasoning-header {
+            display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+            cursor: pointer; user-select: none; color: var(--text-light);
+            font-weight: 500;
+        }
+        .reasoning-header:hover { background: rgba(0,0,0,0.03); }
+        .reasoning-header .arrow {
+            transition: transform 0.2s; font-size: 0.7rem; display: inline-block;
+        }
+        .reasoning-header .arrow.open { transform: rotate(90deg); }
+        .reasoning-header .spinner {
+            width: 14px; height: 14px; border: 2px solid var(--border);
+            border-top-color: var(--primary); border-radius: 50%;
+            animation: spin 0.8s linear infinite; flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .reasoning-header .phase-text { flex: 1; }
+        .reasoning-header .elapsed {
+            font-size: 0.72rem; color: var(--text-light); opacity: 0.7;
+            font-variant-numeric: tabular-nums;
+        }
+        .reasoning-body {
+            max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+        }
+        .reasoning-body.open { max-height: 600px; overflow-y: auto; }
+        .reasoning-steps { padding: 0 12px 10px 12px; }
+        .step {
+            display: flex; align-items: flex-start; gap: 8px;
+            padding: 5px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
+            animation: fadeIn 0.25s ease;
+        }
+        .step:last-child { border-bottom: none; }
+        .step-icon { flex-shrink: 0; width: 20px; text-align: center; font-size: 0.85rem; }
+        .step-text { flex: 1; color: var(--text); line-height: 1.4; }
+        .step-text .tool-name { font-weight: 600; color: var(--primary); }
+        .step-meta {
+            font-size: 0.72rem; color: var(--text-light); white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .step.active .step-icon { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .step.done .step-icon { color: #16a34a; }
+
+        /* --- Tool summary badge --- */
+        .tool-summary {
+            display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;
+        }
+        .tool-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #eff6ff; color: #1e40af; font-size: 0.72rem;
+            padding: 2px 8px; border-radius: 10px; font-weight: 500;
+        }
+        .tool-badge .tb-time { opacity: 0.6; }
+
+        /* --- Action tiles (follow-up actions below bot messages) --- */
+        .action-tiles {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            margin-top: 10px; padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+        .action-tile {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; padding: 6px 14px; font-size: 0.78rem;
+            cursor: pointer; transition: all 0.2s; color: var(--primary);
+            font-weight: 500; white-space: nowrap; max-width: 300px;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .action-tile:hover {
+            background: var(--primary); color: white;
+            border-color: var(--primary); box-shadow: var(--shadow);
+        }
+        .ai-sum-link {
+            color: var(--primary); cursor: pointer; text-decoration: none;
+            border-bottom: 1px dotted var(--primary); font-size: 0.85em;
+            white-space: nowrap;
+        }
+        .ai-sum-link:hover { border-bottom-style: solid; }
+        .ai-citizen-link {
+            color: #e67e22; cursor: pointer; text-decoration: none;
+            border-bottom: 1px dotted #e67e22; font-size: 0.85em;
+            white-space: nowrap;
+        }
+        .ai-citizen-link:hover { border-bottom-style: solid; }
+        /* Language picker overlay */
+        .lang-overlay {
+            position: fixed; inset: 0; background: var(--bg);
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 1000; gap: 30px;
+        }
+        .lang-overlay h2 { font-size: 1.6rem; color: var(--primary); }
+        .lang-overlay p { color: var(--text-light); max-width: 400px; text-align: center; line-height: 1.5; }
+        .lang-buttons { display: flex; gap: 20px; }
+        .lang-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 24px 36px; border-radius: 16px; border: 2px solid var(--border);
+            background: var(--surface); cursor: pointer; transition: all 0.25s;
+            font-size: 1rem; color: var(--text); min-width: 160px;
+        }
+        .lang-btn:hover { border-color: var(--primary); box-shadow: var(--shadow); transform: translateY(-2px); }
+        .lang-btn .lang-flag { font-size: 2.5rem; }
+        .lang-btn .lang-name { font-weight: 600; }
+
+        #input-area {
+            background: var(--surface); border-top: 1px solid var(--border);
+            padding: 16px 20px; display: flex; gap: 10px; align-items: end;
+            max-width: 1200px; width: 100%; margin: 0 auto;
+        }
+        #input-area textarea {
+            flex: 1; border: 1px solid var(--border); border-radius: 12px;
+            padding: 12px 16px; font-size: 0.92rem; font-family: inherit;
+            resize: none; outline: none; min-height: 44px; max-height: 120px;
+            line-height: 1.4; transition: border-color 0.2s;
+        }
+        #input-area textarea:focus { border-color: var(--primary); }
+        #send-btn {
+            background: var(--primary); color: white; border: none;
+            border-radius: 12px; width: 44px; height: 44px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s; flex-shrink: 0;
+        }
+        #send-btn:hover { background: var(--primary-light); }
+        #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        footer {
+            text-align: center; padding: 12px 16px; font-size: 0.7rem;
+            color: var(--text-light); background: var(--surface);
+            border-top: 1px solid var(--border); line-height: 1.6;
+        }
+        footer a { color: var(--primary); text-decoration: none; }
+        footer .disclaimer { margin-top: 4px; font-size: 0.65rem; opacity: 0.75; }
+        footer .azure-services { margin-top: 2px; font-size: 0.63rem; opacity: 0.65; }
+
+        /* --- Guided exploration path --- */
+        .guided-section {
+            max-width: 640px; margin: 16px auto 0; text-align: left;
+            animation: fadeIn 0.35s ease;
+        }
+        .guided-title {
+            font-size: 0.9rem; color: var(--primary); margin-bottom: 10px;
+            text-align: center; font-weight: 600;
+        }
+        .guided-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+        }
+        @media (max-width: 600px) { .guided-grid { grid-template-columns: repeat(2, 1fr); } }
+        .guided-card {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 4px; padding: 16px 10px; border-radius: 14px;
+            background: var(--surface); border: 1.5px solid var(--border);
+            cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .guided-card:hover {
+            border-color: var(--primary); box-shadow: 0 4px 16px rgba(0,51,102,0.12);
+            transform: translateY(-2px);
+        }
+        .guided-card .guided-icon { font-size: 1.6rem; }
+        .guided-card .guided-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+        .guided-card .guided-sub { font-size: 0.68rem; color: var(--text-light); line-height: 1.3; }
+        .guided-chips {
+            display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+        }
+        .guided-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: var(--surface); border: 1.5px solid var(--border);
+            border-radius: 20px; padding: 8px 16px; font-size: 0.82rem;
+            cursor: pointer; transition: all 0.2s; color: var(--text);
+            font-weight: 500;
+        }
+        .guided-chip:hover {
+            background: var(--primary); color: white;
+            border-color: var(--primary); box-shadow: var(--shadow);
+        }
+        .guided-chip .chip-icon { font-size: 1rem; }
+        .guided-chip .chip-count {
+            font-size: 0.68rem; color: var(--text-light);
+            background: rgba(0,0,0,0.05); padding: 1px 6px; border-radius: 8px;
+        }
+        .guided-chip:hover .chip-count { background: rgba(255,255,255,0.25); color: white; }
+        .guided-chip.active {
+            background: var(--primary); color: white; border-color: var(--primary);
+        }
+        .guided-chip.active .chip-count { background: rgba(255,255,255,0.25); color: white; }
+        .guided-back {
+            display: block; margin: 12px auto 0; background: none;
+            border: none; color: var(--text-light); font-size: 0.78rem;
+            cursor: pointer; text-decoration: underline;
+        }
+        .guided-back:hover { color: var(--primary); }
+
+        /* Wahlperiode range slider */
+        .wp-slider-section {
+            max-width: 640px; margin: 0 auto 8px; text-align: center;
+        }
+        .wp-slider-section .wp-label {
+            font-size: 0.82rem; font-weight: 600; color: var(--primary);
+            margin-bottom: 6px; display: block;
+        }
+        .wp-slider-row {
+            display: flex; align-items: center; gap: 10px; justify-content: center;
+        }
+        .wp-slider-row .wp-val {
+            font-size: 0.78rem; font-weight: 700; color: var(--text);
+            min-width: 42px; text-align: center; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 8px; padding: 3px 6px;
+        }
+        .wp-range-wrap {
+            position: relative; flex: 1; max-width: 360px; height: 32px;
+        }
+        .wp-range-wrap input[type=range] {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            -webkit-appearance: none; appearance: none; background: transparent;
+            pointer-events: none; margin: 0;
+        }
+        .wp-range-wrap input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 20px; width: 20px;
+            border-radius: 50%; background: var(--primary); border: 2px solid white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2); pointer-events: all; cursor: pointer;
+            position: relative; z-index: 2;
+        }
+        .wp-range-wrap input[type=range]::-moz-range-thumb {
+            height: 20px; width: 20px; border-radius: 50%;
+            background: var(--primary); border: 2px solid white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2); pointer-events: all; cursor: pointer;
+        }
+        .wp-range-track {
+            position: absolute; top: 50%; left: 0; right: 0;
+            height: 4px; transform: translateY(-50%); border-radius: 2px;
+            background: var(--border);
+        }
+        .wp-range-fill {
+            position: absolute; top: 50%; height: 4px;
+            transform: translateY(-50%); border-radius: 2px;
+            background: var(--primary);
+        }
+        .wp-years-hint {
+            font-size: 0.65rem; color: var(--text-light); margin-top: 2px;
+        }
+        /* --- Live streaming log (terminal-like) --- */
+        .stream-log {
+            background: #1a1f2e; color: #c8d0e0; border-radius: 10px;
+            padding: 12px 14px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.78rem; line-height: 1.6; max-height: 400px; overflow-y: auto;
+            margin-bottom: 8px; white-space: pre-wrap; word-break: break-word;
+        }
+        .stream-log .log-step { color: #7ec8e3; }
+        .stream-log .log-ok { color: #6ee7a0; }
+        .stream-log .log-time { color: #a78bfa; }
+        .stream-log .log-warn { color: #fbbf24; }
+        .stream-log .log-dim { color: #64748b; }
+        .stream-log .log-content { color: #e2e8f0; }
+        .stream-log .log-stream-preview { color: #94a3b8; font-size: 0.85em; line-height: 1.4; display: block; margin-top: 2px; max-height: 3.6em; overflow: hidden; }
+        .stream-log .log-cursor {
+            display: inline-block; width: 7px; height: 1.1em;
+            background: #7ec8e3; animation: blink 0.8s step-end infinite;
+            vertical-align: text-bottom; margin-left: 1px;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        /* Final formatted result (appears after streaming) */
+        .final-result { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <!-- Language picker (shown on first load) -->
+    <div class="lang-overlay" id="lang-overlay">
+        <h2>🏛️ Chat with your Bundestag</h2>
+        <p>Choose your language / Sprache wählen</p>
+        <div class="lang-buttons">
+            <button class="lang-btn" onclick="setLang('de')">
+                <span class="lang-flag">🇩🇪</span>
+                <span class="lang-name">Deutsch</span>
+            </button>
+            <button class="lang-btn" onclick="setLang('en')">
+                <span class="lang-flag">🇬🇧</span>
+                <span class="lang-name">English</span>
+            </button>
+        </div>
+    </div>
+
+    <header>
+        <span style="font-size:1.5rem">🏛️</span>
+        <h1>Chat with your Bundestag</h1>
+        <span class="badge">MCP + GPT-5 mini</span>
+        <span class="subtitle">Powered by DIP API & OpenAI</span>
+    </header>
+    <div id="chat-container">
+        <div class="welcome" id="welcome">
+            <h2>Chat with your Bundestag 🇩🇪</h2>
+            <p>Stellen Sie Fragen zur deutschen Parlamentsdokumentation.<br>
+            Ich durchsuche die DIP API des Bundestages in Echtzeit.</p>
+
+            <!-- Wahlperiode range slider -->
+            <div class="wp-slider-section" id="wp-slider-section">
+                <span class="wp-label" id="wp-slider-label">📅 Wahlperiode</span>
+                <div class="wp-slider-row">
+                    <span class="wp-val" id="wp-from-val">19</span>
+                    <div class="wp-range-wrap">
+                        <div class="wp-range-track"></div>
+                        <div class="wp-range-fill" id="wp-range-fill"></div>
+                        <input type="range" id="wp-from" min="1" max="21" value="19">
+                        <input type="range" id="wp-to" min="1" max="21" value="21">
+                    </div>
+                    <span class="wp-val" id="wp-to-val">21</span>
+                </div>
+                <div class="wp-years-hint" id="wp-years-hint">2017 – 2026+</div>
+            </div>
+
+            <!-- Guided path: Topic selection -->
+            <div class="guided-section" id="guided-topics">
+                <h3 class="guided-title">📌 Thema wählen</h3>
+                <div class="guided-grid">
+                    <button class="guided-card" onclick="pickTopic('finance')">
+                        <span class="guided-icon">💰</span>
+                        <span class="guided-label">Finanzen &amp; Haushalt</span>
+                        <span class="guided-sub">Steuern, Schulden, Bundeshaushalt</span>
+                    </button>
+                    <button class="guided-card" onclick="pickTopic('digital')">
+                        <span class="guided-icon">💻</span>
+                        <span class="guided-label">Digitalisierung &amp; KI</span>
+                        <span class="guided-sub">Technologie, Datenschutz, IT-Sicherheit</span>
+                    </button>
+                    <button class="guided-card" onclick="pickTopic('environment')">
+                        <span class="guided-icon">🌿</span>
+                        <span class="guided-label">Umwelt &amp; Klima</span>
+                        <span class="guided-sub">Klimaschutz, Energie, Nachhaltigkeit</span>
+                    </button>
+                    <button class="guided-card" onclick="pickTopic('health')">
+                        <span class="guided-icon">🏥</span>
+                        <span class="guided-label">Gesundheit</span>
+                        <span class="guided-sub">Krankenhäuser, Pflege, Pandemie</span>
+                    </button>
+                    <button class="guided-card" onclick="pickTopic('security')">
+                        <span class="guided-icon">🛡️</span>
+                        <span class="guided-label">Sicherheit &amp; Verteidigung</span>
+                        <span class="guided-sub">Bundeswehr, Innere Sicherheit</span>
+                    </button>
+                    <button class="guided-card" onclick="pickTopic('education')">
+                        <span class="guided-icon">🎓</span>
+                        <span class="guided-label">Bildung &amp; Forschung</span>
+                        <span class="guided-sub">Schulen, Universitäten, Wissenschaft</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Guided path: Fraktion/Party filter (shown after topic) -->
+            <div class="guided-section" id="guided-fraktion" style="display:none">
+                <h3 class="guided-title" id="guided-fraktion-title">🏛️ Fraktion / Urheber filtern</h3>
+                <div class="guided-chips" id="fraktion-chips"></div>
+                <button class="guided-back" onclick="guidedBack()">← Zurück zur Themenwahl</button>
+            </div>
+
+            <!-- Guided path: Document type (shown after fraktion) -->
+            <div class="guided-section" id="guided-doctype" style="display:none">
+                <h3 class="guided-title" id="guided-doctype-title">📄 Dokumentart wählen</h3>
+                <div class="guided-chips" id="doctype-chips"></div>
+                <button class="guided-back" onclick="guidedBack()">← Zurück</button>
+            </div>
+
+            <!-- Original suggestions as fallback -->
+            <div class="suggestions" style="margin-top: 20px">
+                <button class="suggestion" onclick="useSuggestion(this)">Welche Gesetze wurden 2026 verabschiedet?</button>
+                <button class="suggestion" onclick="useSuggestion(this)">Suche Drucksachen zum Thema Klimaschutz</button>
+                <button class="suggestion" onclick="useSuggestion(this)">Was wurde im Bundestag zu KI diskutiert?</button>
+                <button class="suggestion" onclick="useSuggestion(this)">Zeige aktuelle Plenarprotokolle</button>
+            </div>
+        </div>
+    </div>
+    <div id="input-area">
+        <textarea id="user-input" placeholder="Frage zum Bundestag stellen..." rows="1"
+                  aria-label="Chat message input"
+                  onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button id="send-btn" onclick="sendMessage()" title="Senden" aria-label="Send message">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+        </button>
+    </div>
+    <footer>
+        <div>Daten: <a href="https://search.dip.bundestag.de/" target="_blank">DIP API des Deutschen Bundestages</a> · KI-Modell: GPT-5 mini</div>
+        <div class="disclaimer">⚠️ Non-commercial research project — not intended for productive use. AI-generated content may be inaccurate or incomplete. Always verify with official sources.</div>
+        <div class="azure-services">Hosted on Microsoft Azure · Azure Container Apps · Azure Container Registry · OpenAI API</div>
+    </footer>
+
+    <script>
+    /* ── i18n ── */
+    let appLang = 'de';
+    const I18N = {
+        de: {
+            welcomeTitle: 'Chat with your Bundestag 🇩🇪',
+            welcomeText: 'Stellen Sie Fragen zur deutschen Parlamentsdokumentation.<br>Ich durchsuche die DIP API des Bundestages in Echtzeit.',
+            topicTitle: '📌 Thema wählen',
+            fraktionTitle: '🏛️ Fraktion / Urheber filtern',
+            doctypeTitle: '📄 Dokumentart wählen',
+            backTopics: '← Zurück zur Themenwahl',
+            backGeneral: '← Zurück',
+            placeholder: 'Frage zum Bundestag stellen...',
+            sendTitle: 'Senden',
+            aiSumBtn: 'AI Zusammenfassung',
+            thinking: 'Denke nach...',
+            answering: 'Antwort wird generiert...',
+            streaming: 'Antwort wird gestreamt...',
+            serverError: 'Serverfehler',
+            error: 'Fehler',
+            apiQueries: (n, s) => `${n} API-Abfrage${n>1?'n':''} in ${s}s`,
+            doneIn: s => `Fertig in ${s}s`,
+            readyAnswer: 'Bereit für Antwort',
+            suggestions: [
+                'Welche Gesetze wurden 2026 verabschiedet?',
+                'Suche Drucksachen zum Thema Klimaschutz',
+                'Was wurde im Bundestag zu KI diskutiert?',
+                'Zeige aktuelle Plenarprotokolle',
+            ],
+            topicLabels: {
+                finance: { label: 'Finanzen & Haushalt', sub: 'Steuern, Schulden, Bundeshaushalt' },
+                digital: { label: 'Digitalisierung & KI', sub: 'Technologie, Datenschutz, IT-Sicherheit' },
+                environment: { label: 'Umwelt & Klima', sub: 'Klimaschutz, Energie, Nachhaltigkeit' },
+                health: { label: 'Gesundheit', sub: 'Krankenhäuser, Pflege, Pandemie' },
+                security: { label: 'Sicherheit & Verteidigung', sub: 'Bundeswehr, Innere Sicherheit' },
+                education: { label: 'Bildung & Forschung', sub: 'Schulen, Universitäten, Wissenschaft' },
+            },
+            fraktionAll: 'Alle Fraktionen',
+            doctypeAll: 'Alle Dokumente',
+            pickFraktionSuffix: '— Fraktion wählen',
+            pickDoctypeSuffix: '— Dokumentart wählen',
+            wpSliderLabel: '📅 Wahlperiode',
+            guidedPrompt: (keywords, wpRange, fraktion, doctype) => {
+                let p = `Suche in ${wpRange} nach den Stichworten: ${keywords}`;
+                if (fraktion) p += ` von der ${fraktion}`;
+                if (doctype) p += `, Dokumentart: ${doctype}`;
+                p += '. Suche jedes Stichwort einzeln (OR-Suche). Zeige die wichtigsten Ergebnisse als Tabelle mit Titel, Datum und Link.';
+                return p;
+            },
+        },
+        en: {
+            welcomeTitle: 'Chat with your Bundestag 🇩🇪',
+            welcomeText: 'Ask questions about German parliamentary documents.<br>I search the Bundestag DIP API in real time.',
+            topicTitle: '📌 Choose a topic',
+            fraktionTitle: '🏛️ Filter by party / faction',
+            doctypeTitle: '📄 Choose document type',
+            backTopics: '← Back to topics',
+            backGeneral: '← Back',
+            placeholder: 'Ask about the Bundestag...',
+            sendTitle: 'Send',
+            aiSumBtn: 'AI Summary',
+            thinking: 'Thinking...',
+            answering: 'Generating answer...',
+            streaming: 'Streaming answer...',
+            serverError: 'Server error',
+            error: 'Error',
+            apiQueries: (n, s) => `${n} API quer${n>1?'ies':'y'} in ${s}s`,
+            doneIn: s => `Done in ${s}s`,
+            readyAnswer: 'Ready to answer',
+            suggestions: [
+                'What laws were passed in 2026?',
+                'Search documents about climate protection',
+                'What was discussed about AI in the Bundestag?',
+                'Show recent plenary protocols',
+            ],
+            topicLabels: {
+                finance: { label: 'Finance & Budget', sub: 'Taxes, debt, federal budget' },
+                digital: { label: 'Digitalization & AI', sub: 'Technology, data protection, IT security' },
+                environment: { label: 'Environment & Climate', sub: 'Climate protection, energy, sustainability' },
+                health: { label: 'Health', sub: 'Hospitals, care, pandemic' },
+                security: { label: 'Security & Defence', sub: 'Armed forces, internal security' },
+                education: { label: 'Education & Research', sub: 'Schools, universities, science' },
+            },
+            fraktionAll: 'All parties',
+            doctypeAll: 'All documents',
+            pickFraktionSuffix: '— Choose party',
+            pickDoctypeSuffix: '— Choose document type',
+            wpSliderLabel: '📅 Legislative period',
+            guidedPrompt: (keywords, wpRange, fraktion, doctype) => {
+                let p = `Search in ${wpRange} for keywords: ${keywords}`;
+                if (fraktion) p += ` by ${fraktion}`;
+                if (doctype) p += `, document type: ${doctype}`;
+                p += '. Search each keyword individually (OR search). Show the most important results as a table with title, date and link.';
+                return p;
+            },
+        },
+    };
+    function t(key) { return I18N[appLang][key] || I18N.de[key] || key; }
+
+    function setLang(lang) {
+        appLang = lang;
+        document.getElementById('lang-overlay').style.display = 'none';
+        applyTranslations();
+    }
+
+    function applyTranslations() {
+        // Welcome
+        const wt = document.querySelector('#welcome h2');
+        if (wt) wt.textContent = t('welcomeTitle');
+        const wp = document.querySelector('#welcome > p');
+        if (wp) wp.innerHTML = t('welcomeText');
+        // Guided
+        const gt = document.querySelector('#guided-topics .guided-title');
+        if (gt) gt.textContent = t('topicTitle');
+        // Topic cards
+        document.querySelectorAll('.guided-card').forEach(card => {
+            const key = card.getAttribute('onclick').match(/pickTopic\('(\w+)'\)/)?.[1];
+            if (key && t('topicLabels')[key]) {
+                card.querySelector('.guided-label').textContent = t('topicLabels')[key].label;
+                card.querySelector('.guided-sub').textContent = t('topicLabels')[key].sub;
+            }
+        });
+        // Back buttons
+        const fb = document.querySelector('#guided-fraktion .guided-back');
+        if (fb) fb.textContent = t('backTopics');
+        const db = document.querySelector('#guided-doctype .guided-back');
+        if (db) db.textContent = t('backGeneral');
+        // Suggestions
+        const sugs = document.querySelectorAll('.suggestions .suggestion');
+        const sugTexts = t('suggestions');
+        sugs.forEach((s, i) => { if (sugTexts[i]) s.textContent = sugTexts[i]; });
+        // Input
+        document.getElementById('user-input').placeholder = t('placeholder');
+        document.getElementById('send-btn').title = t('sendTitle');
+        // WP slider
+        const wsl = document.getElementById('wp-slider-label');
+        if (wsl) wsl.textContent = t('wpSliderLabel');
+        updateWpSlider();
+    }
+    function esc(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function _escAttr(s) {
+        return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function _safeHref(url) {
+        const u = url.replace(/&amp;/g,'&');
+        return /^(https?:\/\/|\/|\.\.?\/)/.test(u) ? u : '';
+    }
+    function inline(s) {
+        return esc(s)
+            .replace(/`([^`]+)`/g,'<code>$1</code>')
+            .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g,'<em>$1</em>')
+            .replace(/\[🤖[^\]]*\]\(ai:([^:]+):([^:]+):([^)]*)\)/g, function(_m, dtype, id, nr) {
+                const dt = _escAttr(dtype.replace(/&amp;/g,'&'));
+                const cleanId = _escAttr(id.replace(/&amp;/g,'&'));
+                const n = _escAttr(nr.replace(/&amp;/g,'&'));
+                return '<a class="ai-sum-link" data-dtype="' + dt + '" data-id="' + cleanId + '" data-nr="' + n + '" title="' + t('aiSumBtn') + '">🤖 AI</a>';
+            })
+            .replace(/\[👤[^\]]*\]\(ci:([^:]+):([^:]+):([^)]*)\)/g, function(_m, dtype, id, nr) {
+                const dt = _escAttr(dtype.replace(/&amp;/g,'&'));
+                const cleanId = _escAttr(id.replace(/&amp;/g,'&'));
+                const n = _escAttr(nr.replace(/&amp;/g,'&'));
+                return '<a class="ai-citizen-link" data-dtype="' + dt + '" data-id="' + cleanId + '" data-nr="' + n + '" title="Citizen Impact">👤 Bürger:innen</a>';
+            })
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_m, text, url) {
+                const href = _safeHref(url);
+                if (!href) return esc(text);
+                return '<a href="' + _escAttr(href) + '" target="_blank" rel="noopener">' + text + '</a>';
+            });
+    }
+    function md(text) {
+        if (!text) return '';
+        const lines = text.split('\n');
+        const out = [];
+        let inTable = false, isFirstRow = false;
+        let inCode = false, code = [];
+        let inList = false, listType = '';
+
+        for (const raw of lines) {
+            const t = raw.trimEnd();
+            const tt = t.trim();
+
+            // Code blocks
+            if (tt.startsWith('```')) {
+                if (inList) { out.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                if (inTable) { out.push('</table></div>'); inTable = false; }
+                if (inCode) {
+                    out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>');
+                    code = []; inCode = false;
+                } else { inCode = true; }
+                continue;
+            }
+            if (inCode) { code.push(raw); continue; }
+
+            // Tables
+            if (/^\|.+\|$/.test(tt)) {
+                if (inList) { out.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                if (!inTable) { inTable = true; isFirstRow = true; out.push('<div class="table-scroll"><table>'); }
+                if (/^\|[\s\-:|]+\|$/.test(tt) && tt.includes('---')) { isFirstRow = false; continue; }
+                const cells = tt.slice(1, -1).split('|').map(c => c.trim());
+                const tag = isFirstRow ? 'th' : 'td';
+                out.push('<tr>' + cells.map(c => `<${tag}>${inline(c)}</${tag}>`).join('') + '</tr>');
+                if (isFirstRow) isFirstRow = false;
+                continue;
+            }
+            if (inTable) { out.push('</table></div>'); inTable = false; }
+
+            // Headers
+            const hm = tt.match(/^(#{1,4}) (.+)/);
+            if (hm) {
+                if (inList) { out.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                const lv = hm[1].length;
+                out.push(`<h${lv}>${inline(hm[2])}</h${lv}>`);
+                continue;
+            }
+
+            // HR
+            if (/^-{3,}$/.test(tt)) {
+                if (inList) { out.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                out.push('<hr>');
+                continue;
+            }
+
+            // Unordered list
+            if (/^[-•] /.test(tt)) {
+                if (!inList || listType !== 'ul') {
+                    if (inList) out.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    out.push('<ul>'); inList = true; listType = 'ul';
+                }
+                out.push('<li>' + inline(tt.slice(2)) + '</li>');
+                continue;
+            }
+
+            // Ordered list
+            const om = tt.match(/^(\d+)\. (.+)/);
+            if (om) {
+                if (!inList || listType !== 'ol') {
+                    if (inList) out.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    out.push('<ol>'); inList = true; listType = 'ol';
+                }
+                out.push('<li>' + inline(om[2]) + '</li>');
+                continue;
+            }
+
+            // Close list if non-list line
+            if (inList) { out.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+
+            // Empty line
+            if (!tt) { out.push('<br>'); continue; }
+
+            // Regular text
+            out.push('<p>' + inline(tt) + '</p>');
+        }
+        if (inTable) out.push('</table></div>');
+        if (inList) out.push(listType === 'ul' ? '</ul>' : '</ol>');
+        if (inCode) out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>');
+        return out.join('');
+    }
+
+    /* ── State ── */
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    let history = [];
+    let isStreaming = false;
+
+    function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight,120)+'px'; }
+    function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+    function useSuggestion(btn) { userInput.value = btn.textContent; sendMessage(); }
+    function scrollBottom() { chatContainer.scrollTop = chatContainer.scrollHeight; }
+
+    /* ── Reasoning panel (inside the bot bubble) ── */
+    class ReasoningUI {
+        constructor(bubble) {
+            this.bubble = bubble;
+            this.startTime = Date.now();
+            this.stepMap = {};          // track steps by a unique key
+            this.activeModelStep = null; // currently-active model thinking step
+            this.panel = document.createElement('div');
+            this.panel.className = 'reasoning-panel';
+
+            this.header = document.createElement('div');
+            this.header.className = 'reasoning-header';
+            this.header.setAttribute('role', 'button');
+            this.header.setAttribute('aria-expanded', 'true');
+            this.header.setAttribute('tabindex', '0');
+            this.header.innerHTML = `
+                <span class="arrow open">▶</span>
+                <span class="spinner"></span>
+                <span class="phase-text">${t('thinking')}</span>
+                <span class="elapsed">0s</span>
+            `;
+            this.header.onclick = () => this.toggle();
+
+            this.body = document.createElement('div');
+            this.body.className = 'reasoning-body open';
+            this.steps = document.createElement('div');
+            this.steps.className = 'reasoning-steps';
+            this.body.appendChild(this.steps);
+
+            this.panel.appendChild(this.header);
+            this.panel.appendChild(this.body);
+            this.bubble.appendChild(this.panel);
+
+            this.timer = setInterval(() => this.updateElapsed(), 1000);
+            this.isOpen = true;
+        }
+
+        updateElapsed() {
+            const s = Math.round((Date.now() - this.startTime) / 1000);
+            this.header.querySelector('.elapsed').textContent = s + 's';
+        }
+
+        toggle() {
+            this.isOpen = !this.isOpen;
+            this.body.classList.toggle('open', this.isOpen);
+            this.header.querySelector('.arrow').classList.toggle('open', this.isOpen);
+            this.header.setAttribute('aria-expanded', String(this.isOpen));
+        }
+
+        setPhase(text) {
+            this.header.querySelector('.phase-text').textContent = text;
+        }
+
+        addStep(icon, text, cls = '') {
+            const step = document.createElement('div');
+            step.className = 'step ' + cls;
+            step.dataset.startTime = Date.now();
+            step.innerHTML = `
+                <span class="step-icon">${icon}</span>
+                <span class="step-text">${text}</span>
+                <span class="step-meta"></span>
+            `;
+            this.steps.appendChild(step);
+            scrollBottom();
+            return step;
+        }
+
+        completeStep(step, icon, text, meta, cls) {
+            if (!step) return;
+            if (icon) step.querySelector('.step-icon').textContent = icon;
+            if (text) step.querySelector('.step-text').innerHTML = text;
+            if (meta) step.querySelector('.step-meta').textContent = meta;
+            if (cls) step.className = 'step ' + cls;
+        }
+
+        /* -- Phase handlers -- */
+
+        onModelThinking(data) {
+            const label = data.label || `KI analysiert... (Runde ${data.round})`;
+            this.setPhase(label);
+            this.activeModelStep = this.addStep('🤖', label, 'active');
+            // Start a per-step timer for the model step
+            this.activeModelStep._stepTimer = setInterval(() => {
+                const s = ((Date.now() - parseInt(this.activeModelStep.dataset.startTime)) / 1000).toFixed(0);
+                this.activeModelStep.querySelector('.step-meta').textContent = s + 's';
+            }, 500);
+        }
+
+        onModelDecided(data) {
+            if (this.activeModelStep) {
+                clearInterval(this.activeModelStep._stepTimer);
+                const decidedText = data.n_tools > 0
+                    ? `${data.label}`
+                    : (data.label || t('readyAnswer'));
+                this.completeStep(this.activeModelStep, '✅', decidedText, `${data.elapsed}s`, 'done');
+                this.activeModelStep = null;
+            }
+        }
+
+        onToolCall(data) {
+            this.setPhase(`Rufe ${data.label} ab...`);
+            const step = this.addStep('⏳', `<span class="tool-name">${data.label}</span>`, 'active');
+            step._stepTimer = setInterval(() => {
+                const s = ((Date.now() - parseInt(step.dataset.startTime)) / 1000).toFixed(0);
+                step.querySelector('.step-meta').textContent = s + 's';
+            }, 500);
+            this.pendingToolSteps = this.pendingToolSteps || [];
+            this.pendingToolSteps.push(step);
+        }
+
+        onToolResult(data) {
+            const step = (this.pendingToolSteps && this.pendingToolSteps.length)
+                ? this.pendingToolSteps.shift() : null;
+            if (step) {
+                clearInterval(step._stepTimer);
+                const chars = data.chars ? ` — ${(data.chars/1000).toFixed(1)}k Zeichen` : '';
+                this.completeStep(step, '✅',
+                    `<span class="tool-name">${data.label}</span>${chars}`,
+                    `${data.elapsed}s`, 'done');
+            }
+        }
+
+        onAnswering() {
+            this.setPhase(t('answering'));
+            this.answerStep = this.addStep('✍️', t('answering'), 'active');
+        }
+
+        onContentStart() {
+            if (this.answerStep) {
+                this.completeStep(this.answerStep, '✍️', t('streaming'), '', 'done');
+            }
+        }
+
+        finish(toolDetails, totalElapsed) {
+            this.cleanup();
+            this.updateElapsed();
+            const spinner = this.header.querySelector('.spinner');
+            if (spinner) spinner.outerHTML = '<span style="font-size:0.85rem">✅</span>';
+            const total = totalElapsed || Math.round((Date.now() - this.startTime) / 1000);
+            const n = toolDetails ? toolDetails.length : 0;
+            this.setPhase(n > 0
+                ? t('apiQueries')(n, total)
+                : t('doneIn')(total)
+            );
+            if (this.isOpen) this.toggle();
+        }
+
+        cleanup() {
+            if (this.timer) { clearInterval(this.timer); this.timer = null; }
+            if (this.activeModelStep && this.activeModelStep._stepTimer) {
+                clearInterval(this.activeModelStep._stepTimer);
+            }
+            if (this.pendingToolSteps) {
+                this.pendingToolSteps.forEach(s => { if (s._stepTimer) clearInterval(s._stepTimer); });
+            }
+        }
+    }
+
+    /* ── Message helpers ── */
+    function addMessage(role, content) {
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.remove();
+        const div = document.createElement('div');
+        div.className = `message ${role}`;
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = role === 'user' ? '👤' : '🏛️';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        const textDiv = document.createElement('div');
+        textDiv.innerHTML = role === 'user' ? content.replace(/\n/g,'<br>') : md(content);
+        bubble.appendChild(textDiv);
+        div.appendChild(avatar);
+        div.appendChild(bubble);
+        chatContainer.appendChild(div);
+        scrollBottom();
+        return { textDiv, bubble };
+    }
+
+    function addToolSummary(bubble, toolDetails) {
+        if (!toolDetails || toolDetails.length === 0) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'tool-summary';
+        for (const t of toolDetails) {
+            const badge = document.createElement('span');
+            badge.className = 'tool-badge';
+            badge.innerHTML = `🔍 ${t.label} <span class="tb-time">${t.elapsed}s</span>`;
+            wrap.appendChild(badge);
+        }
+        bubble.insertBefore(wrap, bubble.lastElementChild);
+    }
+
+    // Delegated click handlers for AI/Citizen links (no inline onclick — XSS-safe)
+    document.addEventListener('click', function(e) {
+        const aiLink = e.target.closest('.ai-sum-link');
+        if (aiLink) {
+            e.preventDefault();
+            const docType = aiLink.dataset.dtype;
+            const id = aiLink.dataset.id;
+            const nr = aiLink.dataset.nr;
+            const de = {
+                'Drucksachen': `Fasse die Drucksache ${nr || id} zusammen (ID:${id})`,
+                'Vorgänge': `Fasse den Vorgang ${nr || id} zusammen (ID:${id})`,
+                'Plenarprotokolle': `Fasse das Plenarprotokoll zusammen (ID:${id})`,
+                'Aktivitäten': `Zeige Details zur Aktivität ${nr || id} (ID:${id})`,
+            };
+            const en = {
+                'Drucksachen': `Summarize document ${nr || id} (ID:${id})`,
+                'Vorgänge': `Summarize proceeding ${nr || id} (ID:${id})`,
+                'Plenarprotokolle': `Summarize plenary protocol (ID:${id})`,
+                'Aktivitäten': `Show details of activity ${nr || id} (ID:${id})`,
+            };
+            const prompts = appLang === 'en' ? en : de;
+            userInput.value = prompts[docType] || `${appLang === 'en' ? 'Summary of' : 'Zusammenfassung von'} ${nr || id} (ID:${id})`;
+            sendMessage();
+            return;
+        }
+        const ciLink = e.target.closest('.ai-citizen-link');
+        if (ciLink) {
+            e.preventDefault();
+            const docType = ciLink.dataset.dtype;
+            const id = ciLink.dataset.id;
+            const nr = ciLink.dataset.nr;
+            const de = {
+                'Drucksachen': `Erkläre die Drucksache ${nr || id} (ID:${id}) aus Bürgerperspektive: Was bedeutet das konkret für Bürgerinnen und Bürger? Welche Auswirkungen hat es auf Alltag, Steuern, Rechte oder Pflichten? Erkläre es einfach und verständlich.`,
+                'Vorgänge': `Erkläre den Vorgang ${nr || id} (ID:${id}) aus Bürgerperspektive: Was bedeutet das konkret für Bürgerinnen und Bürger? Welche Auswirkungen hat es auf Alltag, Steuern, Rechte oder Pflichten? Erkläre es einfach und verständlich.`,
+                'Plenarprotokolle': `Erkläre das Plenarprotokoll (ID:${id}) aus Bürgerperspektive: Welche Themen wurden diskutiert und was bedeuten die Ergebnisse konkret für Bürgerinnen und Bürger?`,
+                'Aktivitäten': `Erkläre die Aktivität ${nr || id} (ID:${id}) aus Bürgerperspektive: Was bedeutet das für Bürgerinnen und Bürger?`,
+            };
+            const en = {
+                'Drucksachen': `Explain document ${nr || id} (ID:${id}) from a citizen's perspective: What does this mean for everyday people? How does it affect daily life, taxes, rights or obligations? Explain in simple terms.`,
+                'Vorgänge': `Explain proceeding ${nr || id} (ID:${id}) from a citizen's perspective: What does this mean for everyday people? How does it affect daily life, taxes, rights or obligations? Explain in simple terms.`,
+                'Plenarprotokolle': `Explain plenary protocol (ID:${id}) from a citizen's perspective: What topics were discussed and what do the outcomes mean for everyday people?`,
+                'Aktivitäten': `Explain activity ${nr || id} (ID:${id}) from a citizen's perspective: What does this mean for everyday people?`,
+            };
+            const prompts = appLang === 'en' ? en : de;
+            userInput.value = prompts[docType] || `${appLang === 'en' ? 'Citizen impact of' : 'Bürger:innen-Auswirkung von'} ${nr || id} (ID:${id})`;
+            sendMessage();
+        }
+    });
+
+    function addActionTiles(bubble, actions) {
+        if (!actions || actions.length === 0) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'action-tiles';
+        for (const a of actions) {
+            const btn = document.createElement('button');
+            btn.className = 'action-tile';
+            btn.textContent = a.label;
+            btn.title = a.prompt;
+            btn.onclick = () => {
+                userInput.value = a.prompt;
+                sendMessage();
+            };
+            wrap.appendChild(btn);
+        }
+        bubble.appendChild(wrap);
+    }
+
+    /* ── Main send logic ── */
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text || isStreaming) return;
+
+        isStreaming = true;
+        sendBtn.disabled = true;
+        userInput.value = '';
+        userInput.style.height = 'auto';
+
+        addMessage('user', text);
+        history.push({ role: 'user', content: text });
+
+        // Create bot message with log panel
+        const { textDiv, bubble } = addMessage('bot', '');
+        const reasoning = new ReasoningUI(bubble);
+
+        // Stream log — terminal-like live view
+        const logEl = document.createElement('div');
+        logEl.className = 'stream-log';
+        logEl.innerHTML = '<span class="log-dim">Connecting...</span>\n';
+        bubble.appendChild(logEl);
+        textDiv.style.display = 'none'; // Hidden during streaming — log panel is visible
+
+        function logLine(html) {
+            // Remove cursor, add line, re-add cursor
+            const cur = logEl.querySelector('.log-cursor');
+            if (cur) cur.remove();
+            logEl.insertAdjacentHTML('beforeend', html + '\n');
+            logEl.insertAdjacentHTML('beforeend', '<span class="log-cursor"></span>');
+            logEl.scrollTop = logEl.scrollHeight;
+            scrollBottom();
+        }
+        function logUpdate(html) {
+            // Replace last text node before cursor
+            const cur = logEl.querySelector('.log-cursor');
+            if (cur) cur.remove();
+            // Find and remove last content span if exists
+            const lastContent = logEl.querySelector('.log-content-live');
+            if (lastContent) lastContent.remove();
+            logEl.insertAdjacentHTML('beforeend', html);
+            logEl.insertAdjacentHTML('beforeend', '<span class="log-cursor"></span>');
+            logEl.scrollTop = logEl.scrollHeight;
+            scrollBottom();
+        }
+
+        try {
+            const resp = await fetch('/api/chat/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, history: history.slice(-20), language: appLang }),
+            });
+
+            if (!resp.ok) {
+                reasoning.finish([]);
+                logEl.remove();
+                textDiv.innerHTML = md(`⚠️ ${t('serverError')} (HTTP ${resp.status})`);
+                throw new Error('bail');
+            }
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullText = '';
+            let contentStarted = false;
+            let allToolDetails = [];
+            let contentLineCount = 0;
+            let renderTimer = null;
+            let waitTimer = null;  // live elapsed timer for "waiting for first token"
+            const streamStartTime = performance.now();
+
+            function scheduleLogRender() {
+                if (!renderTimer) {
+                    renderTimer = setTimeout(() => {
+                        renderTimer = null;
+                        const kc = (fullText.length / 1000).toFixed(1);
+                        const elapsed = ((performance.now() - streamStartTime) / 1000).toFixed(0);
+                        // Show last ~120 chars of streamed text so users see content arriving
+                        const tail = fullText.length > 120 ? '...' + fullText.slice(-120) : fullText;
+                        const safe = esc(tail).replace(/\n/g, ' ');
+                        logUpdate(`<span class="log-content-live"><span class="log-dim">   📝 ${kc}k chars | ${elapsed}s</span><br><span class="log-stream-preview">${safe}</span></span>`);
+                    }, 300);
+                }
+            }
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const d = JSON.parse(line.slice(6));
+
+                        /* Context — initial setup info */
+                        if (d.phase === 'context') {
+                            logLine(`<span class="log-dim">── Session Context ──</span>`);
+                            logLine(`<span class="log-dim">📨 User: "${esc((d.user_message || '').substring(0, 120))}${(d.user_message||'').length > 120 ? '...' : ''}"</span>`);
+                            logLine(`<span class="log-dim">📜 System prompt: ${(d.system_prompt_chars/1000).toFixed(1)}k chars</span>`);
+                            if (d.history_count > 0) logLine(`<span class="log-dim">💬 History: ${d.history_count} messages</span>`);
+                            logLine(`<span class="log-dim">📦 Total messages to API: ${d.total_messages}</span>`);
+                        }
+
+                        /* Phase updates — log + reasoning panel */
+                        if (d.phase === 'model_thinking') {
+                            reasoning.onModelThinking(d);
+                            logLine(`<span class="log-dim">── OpenAI API Call (Phase 1) ──</span>`);
+                            logLine(`<span class="log-step">⚡ ${esc(d.label || 'Analyzing...')}</span>`);
+                            logLine(`<span class="log-dim">   🤖 Model: ${esc(d.model || '?')} | max_tokens: ${d.max_completion_tokens || '?'} | tools: ${d.tools_count || '?'} | parallel: ${d.parallel_tool_calls ? 'yes' : 'no'}</span>`);
+                        }
+                        if (d.phase === 'model_decided') {
+                            reasoning.onModelDecided(d);
+                            if (d.n_tools > 0) {
+                                logLine(`<span class="log-ok">✓ ${esc(d.label)}</span> <span class="log-time">${d.elapsed}s</span>`);
+                            } else {
+                                logLine(`<span class="log-ok">✓ ${esc(d.label || 'Ready')}</span> <span class="log-time">${d.elapsed}s</span>`);
+                            }
+                        }
+                        if (d.phase === 'tool_call') {
+                            reasoning.onToolCall(d);
+                            logLine(`<span class="log-step">→ DIP API: ${esc(d.label)}</span>`);
+                            if (d.args) {
+                                const argsStr = JSON.stringify(d.args);
+                                logLine(`<span class="log-dim">   📋 Params: ${esc(argsStr.substring(0, 200))}${argsStr.length > 200 ? '...' : ''}</span>`);
+                            }
+                        }
+                        if (d.phase === 'tool_result') {
+                            reasoning.onToolResult(d);
+                            const kb = d.chars ? (d.chars / 1000).toFixed(1) + 'k' : '0';
+                            logLine(`<span class="log-ok">✓ ${esc(d.label)}</span> <span class="log-dim">${kb} chars</span> <span class="log-time">${d.elapsed}s</span>`);
+                            if (d.preview) {
+                                const prev = d.preview.replace(/\n/g, ' ').substring(0, 150);
+                                logLine(`<span class="log-dim">   📄 Preview: ${esc(prev)}${d.preview.length > 150 ? '...' : ''}</span>`);
+                            }
+                        }
+                        if (d.phase === 'answering') {
+                            reasoning.onAnswering();
+                            const phaseLabel = d.reuse_phase1 ? 'Reusing Phase 1 answer' : d.search_only ? 'Phase 2 — Fast Search Formatter' : 'Phase 2 — Streaming';
+                            logLine(`<span class="log-dim">── OpenAI API Call (${phaseLabel}) ──</span>`);
+                            const ctxK = d.context_chars ? (d.context_chars / 1000).toFixed(1) + 'k' : '?';
+                            const tokK = d.context_tokens_est ? (d.context_tokens_est / 1000).toFixed(1) + 'k' : '?';
+                            const toolK = d.tool_data_chars ? (d.tool_data_chars / 1000).toFixed(1) + 'k' : '0';
+                            const model = d.model || 'GPT';
+                            const maxTok = d.max_completion_tokens || '?';
+                            logLine(`<span class="log-step">✍ Generating answer → ${esc(model)} (stream=${d.reuse_phase1 ? 'replay' : 'true'}, max_tokens=${maxTok})</span>`);
+                            if (d.search_only) logLine(`<span class="log-ok">   ⚡ Search-only mode — using lightweight prompt for faster formatting</span>`);
+                            logLine(`<span class="log-dim">   📊 Context: ~${tokK} tokens (${ctxK} chars, ${d.n_messages || '?'} msgs)</span>`);
+                            if (parseInt(toolK) > 0) logLine(`<span class="log-dim">   🔧 Tool data in context: ${toolK} chars</span>`);
+                            // Show per-message breakdown
+                            if (d.messages_detail && d.messages_detail.length) {
+                                logLine(`<span class="log-dim">   ── Messages sent to model ──</span>`);
+                                for (const msg of d.messages_detail) {
+                                    const icon = msg.role === 'system' ? '⚙️' : msg.role === 'user' ? '👤' : msg.role === 'tool' ? '🔧' : '🤖';
+                                    const chK = (msg.chars / 1000).toFixed(1) + 'k';
+                                    const prev = msg.preview.replace(/\n/g, ' ').substring(0, 120);
+                                    logLine(`<span class="log-dim">   ${icon} [${esc(msg.role)}] ${chK} chars: ${esc(prev)}${msg.preview.length > 120 ? '...' : ''}</span>`);
+                                }
+                                logLine(`<span class="log-dim">   ──────────────────────────</span>`);
+                            }
+                            // Start live waiting timer
+                            const waitStart = performance.now();
+                            const waitEl = document.createElement('span');
+                            waitEl.className = 'log-dim';
+                            waitEl.textContent = '   ⏳ Waiting for first token... 0.0s';
+                            const cur = logEl.querySelector('.log-cursor');
+                            if (cur) cur.remove();
+                            logEl.appendChild(waitEl);
+                            logEl.insertAdjacentHTML('beforeend', '\n<span class="log-cursor"></span>');
+                            waitTimer = setInterval(() => {
+                                const e = ((performance.now() - waitStart) / 1000).toFixed(1);
+                                waitEl.textContent = `   ⏳ Waiting for first token... ${e}s`;
+                                logEl.scrollTop = logEl.scrollHeight;
+                            }, 200);
+                        }
+                        if (d.phase === 'first_token') {
+                            if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+                            logLine(`<span class="log-ok">⚡ First token received</span> <span class="log-time">TTFT ${d.ttft}s</span>`);
+                            logLine(`<span class="log-dim">   📝 Streaming response...</span>`);
+                        }
+                        if (d.phase === 'gen_progress') {
+                            logLine(`<span class="log-dim">   📈 ${d.tokens} tokens (${(d.chars/1000).toFixed(1)}k chars) — ${d.elapsed}s</span>`);
+                        }
+
+                        /* Content streaming — show in log as live text */
+                        if (d.content) {
+                            if (!contentStarted) {
+                                reasoning.onContentStart();
+                                contentStarted = true;
+                            }
+                            fullText += d.content;
+                            scheduleLogRender();
+                        }
+
+                        /* Errors */
+                        if (d.error) {
+                            if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+                            fullText += `\n⚠️ ${d.error}`;
+                            logLine(`<span class="log-warn">⚠️ Error: ${esc(d.error)}</span>`);
+                        }
+
+                        /* Done — swap log for formatted result */
+                        if (d.done) {
+                            if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+                            if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+                            allToolDetails = d.tool_details || [];
+                            const total = d.total_elapsed || '?';
+                            logLine(`<span class="log-ok">✅ Done</span> <span class="log-time">${total}s total</span>`);
+                            // Brief pause so user sees "Done", then swap to formatted
+                            await new Promise(r => setTimeout(r, 500));
+                            logEl.remove();
+                            textDiv.style.display = '';
+                            reasoning.finish(allToolDetails, d.total_elapsed);
+                            addToolSummary(bubble, allToolDetails);
+                            if (fullText) {
+                                const cleanText = fullText.replace(/<!--\s*FOLLOWUP:[\s\S]*?-->/g, '').trimEnd();
+                                textDiv.className = 'final-result';
+                                textDiv.innerHTML = md(cleanText);
+                                fullText = cleanText;
+                            }
+                            addActionTiles(bubble, d.actions);
+                            scrollBottom();
+                        }
+                    } catch (parseErr) {
+                        console.warn('SSE parse error:', parseErr.message, line.slice(0, 200));
+                    }
+                }
+            }
+
+            // Final fallback — if stream ended without d.done
+            if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+            if (fullText && !textDiv.classList.contains('final-result')) {
+                if (logEl.parentNode) logEl.remove();
+                textDiv.style.display = '';
+                const cleanText = fullText.replace(/<!--\s*FOLLOWUP:[\s\S]*?-->/g, '').trimEnd();
+                textDiv.className = 'final-result';
+                textDiv.innerHTML = md(cleanText);
+                scrollBottom();
+                fullText = cleanText;
+            } else if (!fullText) {
+                if (logEl.parentNode) logEl.remove();
+                textDiv.style.display = '';
+                reasoning.finish([]);
+                textDiv.innerHTML = md(appLang === 'en' ? '⚠️ No response received.' : '⚠️ Keine Antwort erhalten.');
+            }
+
+            history.push({ role: 'assistant', content: fullText });
+
+        } catch (err) {
+            if (err.message !== 'bail') {
+                reasoning.finish([]);
+                // Remove log panel on error
+                const logPanel = bubble?.querySelector('.stream-log');
+                if (logPanel) logPanel.remove();
+                // Fallback to non-streaming
+                try {
+                    const resp = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: text, history: history.slice(-20), language: appLang }),
+                    });
+                    const data = await resp.json();
+                    textDiv.innerHTML = md(data.reply);
+                    history.push({ role: 'assistant', content: data.reply });
+                } catch (e2) {
+                    textDiv.innerHTML = md(`⚠️ ${t('error')}: ${esc(e2.message)}`);
+                }
+            }
+        }
+
+        // Cap history to prevent unbounded memory growth
+        if (history.length > 100) history.splice(0, history.length - 100);
+
+        isStreaming = false;
+        sendBtn.disabled = false;
+        userInput.focus();
+    }
+    /* ── Wahlperiode slider logic ── */
+    const WP_YEARS = {
+        1:'1949–1953', 2:'1953–1957', 3:'1957–1961', 4:'1961–1965', 5:'1965–1969',
+        6:'1969–1972', 7:'1972–1976', 8:'1976–1980', 9:'1980–1983', 10:'1983–1987',
+        11:'1987–1990', 12:'1990–1994', 13:'1994–1998', 14:'1998–2002', 15:'2002–2005',
+        16:'2005–2009', 17:'2009–2013', 18:'2013–2017', 19:'2017–2021', 20:'2021–2025',
+        21:'2025–'
+    };
+    function getWpYearLabel(from, to) {
+        const startYear = WP_YEARS[from]?.split('–')[0] || '?';
+        const endPart = WP_YEARS[to]?.split('–')[1] || '';
+        return `${startYear} – ${endPart || '...'}`;
+    }
+    function getWpRangeText(from, to) {
+        if (from === to) return appLang === 'en'
+            ? `legislative period ${from}` : `Wahlperiode ${from}`;
+        return appLang === 'en'
+            ? `legislative periods ${from}–${to}` : `Wahlperioden ${from}–${to}`;
+    }
+    function updateWpSlider() {
+        const fromEl = document.getElementById('wp-from');
+        const toEl = document.getElementById('wp-to');
+        let f = parseInt(fromEl.value), tt = parseInt(toEl.value);
+        if (f > tt) { const tmp = f; f = tt; tt = tmp; fromEl.value = f; toEl.value = tt; }
+        document.getElementById('wp-from-val').textContent = f;
+        document.getElementById('wp-to-val').textContent = tt;
+        document.getElementById('wp-years-hint').textContent = getWpYearLabel(f, tt);
+        // Update fill bar
+        const pct = v => ((v - 1) / 20) * 100;
+        const fill = document.getElementById('wp-range-fill');
+        fill.style.left = pct(f) + '%';
+        fill.style.width = (pct(tt) - pct(f)) + '%';
+    }
+    document.getElementById('wp-from').addEventListener('input', updateWpSlider);
+    document.getElementById('wp-to').addEventListener('input', updateWpSlider);
+    updateWpSlider();
+
+    /* ── Guided exploration flow ── */
+    const TOPICS = {
+        finance:     { label: 'Finanzen & Haushalt', icon: '💰', keywords: ['Haushalt', 'Finanzen', 'Bundeshaushalt'] },
+        digital:     { label: 'Digitalisierung & KI', icon: '💻', keywords: ['Digitalisierung', 'Künstliche Intelligenz', 'Datenschutz'] },
+        environment: { label: 'Umwelt & Klima', icon: '🌿', keywords: ['Klimaschutz', 'Energie', 'Nachhaltigkeit'] },
+        health:      { label: 'Gesundheit', icon: '🏥', keywords: ['Gesundheit', 'Pflege', 'Krankenhaus'] },
+        security:    { label: 'Sicherheit & Verteidigung', icon: '🛡️', keywords: ['Bundeswehr', 'Verteidigung', 'Sicherheit'] },
+        education:   { label: 'Bildung & Forschung', icon: '🎓', keywords: ['Bildung', 'Forschung', 'Wissenschaft'] },
+    };
+
+    const FRAKTIONEN = [
+        { id: 'all',    label: 'Alle Fraktionen',  label_en: 'All parties',        icon: '🏛️', formal: null },
+        { id: 'spd',    label: 'SPD',               label_en: 'SPD',               icon: '🔴', formal: 'Fraktion der SPD' },
+        { id: 'cducsu', label: 'CDU/CSU',            label_en: 'CDU/CSU',           icon: '⚫', formal: 'Fraktion der CDU/CSU' },
+        { id: 'gruene', label: 'Grüne',              label_en: 'Greens',            icon: '🟢', formal: 'Fraktion BÜNDNIS 90/DIE GRÜNEN' },
+        { id: 'afd',    label: 'AfD',                label_en: 'AfD',               icon: '🔵', formal: 'Fraktion der AfD' },
+        { id: 'linke',  label: 'DIE LINKE',          label_en: 'The Left',          icon: '🟣', formal: 'Fraktion DIE LINKE' },
+        { id: 'fdp',    label: 'FDP',                label_en: 'FDP',               icon: '🟡', formal: 'Fraktion der FDP' },
+        { id: 'breg',   label: 'Bundesregierung',    label_en: 'Federal Government',icon: '🇩🇪', formal: 'Bundesregierung' },
+    ];
+    function fLabel(f) { return appLang === 'en' ? (f.label_en || f.label) : f.label; }
+
+    const DOC_TYPES = [
+        { label: 'Alle Dokumente',                label_en: 'All documents',              icon: '📋', type: null },
+        { label: 'Kleine Anfragen',               label_en: 'Minor inquiries',            icon: '❓', type: 'Kleine Anfrage' },
+        { label: 'Gesetzentwürfe',                label_en: 'Draft bills',                icon: '📜', type: 'Gesetzentwurf' },
+        { label: 'Anträge',                       label_en: 'Motions',                    icon: '✋', type: 'Antrag' },
+        { label: 'Antworten',                     label_en: 'Replies',                    icon: '💬', type: 'Antwort' },
+        { label: 'Schriftliche Fragen',           label_en: 'Written questions',          icon: '✉️', type: 'Schriftliche Fragen' },
+        { label: 'Beschlussempfehlung & Bericht', label_en: 'Committee recommendation',   icon: '📊', type: 'Beschlussempfehlung und Bericht' },
+    ];
+    function dLabel(d) { return appLang === 'en' ? (d.label_en || d.label) : d.label; }
+
+    let guidedState = { step: 'topic', topic: null, fraktion: null, doctype: null };
+
+    function pickTopic(topicKey) {
+        guidedState.topic = topicKey;
+        guidedState.step = 'fraktion';
+        const tpc = TOPICS[topicKey];
+
+        // Hide topics, show fraktion
+        document.getElementById('guided-topics').style.display = 'none';
+        document.getElementById('guided-fraktion-title').textContent =
+            `${tpc.icon} ${t('topicLabels')[topicKey]?.label || tpc.label} ${t('pickFraktionSuffix')}`;
+
+        const chips = document.getElementById('fraktion-chips');
+        chips.innerHTML = '';
+        for (const f of FRAKTIONEN) {
+            const btn = document.createElement('button');
+            btn.className = 'guided-chip';
+            btn.innerHTML = `<span class="chip-icon">${f.icon}</span> ${fLabel(f)}`;
+            btn.onclick = () => pickFraktion(f);
+            chips.appendChild(btn);
+        }
+        document.getElementById('guided-fraktion').style.display = '';
+        document.getElementById('guided-doctype').style.display = 'none';
+    }
+
+    function pickFraktion(fraktion) {
+        guidedState.fraktion = fraktion;
+        guidedState.step = 'doctype';
+        const tpc = TOPICS[guidedState.topic];
+        const topicLabel = t('topicLabels')[guidedState.topic]?.label || tpc.label;
+
+        // Highlight selected
+        document.querySelectorAll('#fraktion-chips .guided-chip').forEach(c => c.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+
+        // Show doctype
+        const title = fraktion.id === 'all'
+            ? `${tpc.icon} ${topicLabel} ${t('pickDoctypeSuffix')}`
+            : `${tpc.icon} ${topicLabel} · ${fLabel(fraktion)} ${t('pickDoctypeSuffix')}`;
+        document.getElementById('guided-doctype-title').textContent = title;
+
+        const chips = document.getElementById('doctype-chips');
+        chips.innerHTML = '';
+        for (const d of DOC_TYPES) {
+            const btn = document.createElement('button');
+            btn.className = 'guided-chip';
+            btn.innerHTML = `<span class="chip-icon">${d.icon}</span> ${dLabel(d)}`;
+            btn.onclick = () => executeGuided(d);
+            chips.appendChild(btn);
+        }
+        document.getElementById('guided-doctype').style.display = '';
+    }
+
+    function executeGuided(doctype) {
+        const tpc = TOPICS[guidedState.topic];
+        const f = guidedState.fraktion;
+        const wpFrom = parseInt(document.getElementById('wp-from').value);
+        const wpTo = parseInt(document.getElementById('wp-to').value);
+        const wpMin = Math.min(wpFrom, wpTo), wpMax = Math.max(wpFrom, wpTo);
+        const wpRange = getWpRangeText(wpMin, wpMax);
+        // Max 3 keywords to keep queries fast
+        const keywordList = tpc.keywords.slice(0, 3).map(k => `"${k}"`).join(', ');
+        const fraktionLbl = (f && f.id !== 'all') ? fLabel(f) : null;
+        const doctypeLbl = doctype.type ? dLabel(doctype) : null;
+        const prompt = t('guidedPrompt')(keywordList, wpRange, fraktionLbl, doctypeLbl);
+        userInput.value = prompt;
+        sendMessage();
+    }
+
+    function guidedBack() {
+        if (guidedState.step === 'doctype') {
+            guidedState.step = 'fraktion';
+            document.getElementById('guided-doctype').style.display = 'none';
+        } else if (guidedState.step === 'fraktion') {
+            guidedState.step = 'topic';
+            document.getElementById('guided-fraktion').style.display = 'none';
+            document.getElementById('guided-topics').style.display = '';
+        }
+    }
+
+    </script>
+</body>
+</html>
