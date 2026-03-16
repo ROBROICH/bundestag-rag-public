@@ -272,7 +272,9 @@ These same tools are exposed via **MCP protocol** at `/mcp` for integration with
 
 ## 📄 License
 
-This project is for **educational and research purposes**. Please respect the Bundestag DIP API terms of service.
+This project is licensed under the [MIT License](LICENSE).
+
+> **Note:** This project is for **educational and research purposes**. Please respect the [Bundestag DIP API terms of service](https://dip.bundestag.de/über-dip/nutzungsbedingungen).
 
 ---
 
