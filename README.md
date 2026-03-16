@@ -4,7 +4,9 @@
 
 > **Note:** This project is for **educational and research purposes**. Please respect the [Bundestag DIP API terms of service](https://dip.bundestag.de/über-dip/hilfe/api). The code was developed with GenAI support — not intended for production use without review.
 
-[![Live Demo](https://img.shields.io/badge/🔗_Live_Demo-Azure_Container_Apps-blue)](https://bundestag-rag-api-basic.politeocean-4adf01f2.westeurope.azurecontainerapps.io/)
+[![Live Demo](https://img.shields.io/badge/🔗_Live_Demo-Azure_Container_Apps-blue)](https://bundestag-mcp-chat.victoriouswater-1ba7ee2d.westeurope.azurecontainerapps.io/)
+
+> ⏳ **Cold start:** The demo runs on Azure Container Apps with **scale-to-zero** enabled to minimize costs. The first request after inactivity may take 30–60 seconds while the container starts up.
 
 ---
 
